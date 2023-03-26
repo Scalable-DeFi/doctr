@@ -1,36 +1,25 @@
-.PHONY: quality style test test-common test-tf test-torch docs-single-version docs
-# this target runs checks on all files
-quality:
-	isort . -c
-	flake8 ./
-	black --check .
-	mypy doctr/
-	pydocstyle doctr/
+# api setup is borrowed from https://github.com/frgfm/Holocron/blob/main/api
 
-# this target runs checks on all files and potentially modifies some of them
-style:
-	isort .
-	black .
+.PHONY: lock run stop test
+# Pin the dependencies
+lock:
+	poetry lock
+	poetry export -f requirements.txt --without-hashes --output requirements.txt
+	poetry export -f requirements.txt --without-hashes --with dev --output requirements-dev.txt
+
+# Run the docker
+run:
+	docker compose up -d --build
+
+# Run the docker
+stop:
+	docker compose down
 
 # Run tests for the library
 test:
-	coverage run -m pytest tests/common/
-	USE_TF='1' SLOW='1' coverage run -m pytest tests/tensorflow/
-	USE_TORCH='1' SLOW='1' coverage run -m pytest tests/pytorch/
-
-test-common:
-	coverage run -m pytest tests/common/
-
-test-tf:
-	USE_TF='1' SLOW='1' coverage run -m pytest tests/tensorflow/
-
-test-torch:
-	USE_TORCH='1' SLOW='1' coverage run -m pytest tests/pytorch/
-
-# Check that docs can build
-docs-single-version:
-	sphinx-build docs/source docs/_build -a
-
-# Check that docs can build
-docs:
-	cd docs && bash build.sh
+	docker compose up -d --build
+	docker cp requirements-dev.txt api_web_1:/app/requirements-dev.txt
+	docker compose exec -T web pip install -r requirements-dev.txt
+	docker cp tests api_web_1:/app/tests
+	docker compose exec -T web pytest tests/
+	docker compose down
